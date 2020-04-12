@@ -1,20 +1,9 @@
 use seed::{prelude::*, *};
+use seed::fetch;
 use std::collections::HashMap;
-//extern crate strum; // 0.10.0
-//#[macro_use]
-//extern crate strum_macros; // 0.10.0
+use serde::{Deserialize, Serialize};
+use futures::Future;
 
-//use strum::AsStaticRef;
-//use std::convert::TryFrom;
-
-//extern crate reqwest;
-//use reqwest::blocking;
-
-// use serde::{Deserialize, Serialize};
-
-//type Model = i32;
-
-//#[derive(AsStaticStr)]
 #[derive(Clone)]
 enum Permission {
     Read,
@@ -88,14 +77,26 @@ impl Default for Model {
 enum Msg {
     Increment,
     Decrement,
-    ChangePermSet(String)
+    ChangePermSet(String),
+    DataFetched(fetch::ResponseDataResult<ResponseBody>)
 }
 
-fn update(msg: Msg, model: &mut Model, _: &mut impl Orders<Msg>) {
+fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
     match msg {
         Msg::Increment => model.counter += 1,
         Msg::Decrement => model.counter -= 1,
-	Msg::ChangePermSet(perms) => {log!(format!("Permissions {}",perms))} 
+	Msg::ChangePermSet(perms) => {log!(format!("Permissions {}",perms))}
+	Msg::DataFetched(Ok(response_data)) => {
+            log!(format!("Response data: {:#?}", response_data));
+            orders.skip();
+        }
+	Msg::DataFetched(Err(fail_reason)) => {
+            error!(format!(
+                "Fetch error - Sending message failed - {:#?}",
+                fail_reason
+            ));
+            orders.skip();
+        }
     }
 }
 
@@ -164,8 +165,36 @@ fn view(model: &Model) -> Node<Msg> {
     ]
 }
 
+#[derive(Serialize)]
+struct RequestBody {
+    pub action: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ResponseBody {
+    pub success: bool,
+}
+
+async fn fetch_data() -> Result<Msg, Msg> {
+    let message = RequestBody {
+        action: "GetDatasets".into()
+    };
+    let url = "https://spcoseon48.execute-api.eu-west-1.amazonaws.com/dev/hello";
+    Request::new(url.to_string())
+        .method(Method::Post)
+        .send_json(&message)
+        .fetch_json_data(Msg::DataFetched).await
+}
+
+
+fn after_mount(_: Url, orders: &mut impl Orders<Msg>) -> AfterMount<Model> {
+    orders.perform_cmd(fetch_data());
+    AfterMount::default()
+}
+
 #[wasm_bindgen(start)]
 pub fn render() {
     App::builder(update, view)
+	.after_mount(after_mount)
 	.build_and_start();
 }
