@@ -10,16 +10,15 @@ edition = "2018"
 crate-type = ["cdylib"]
 
 [dependencies]
-seed = "^0.6.0"
-#reqwest = { version = "^0.10.4", features = ["blocking", "json"] }
-#tokio = { version = "^0.2", features = ["full"] }
+seed = "^0.7.0"
 wasm-bindgen = "^0.2.50"
-#strum = "0.18.0"
-#strum_macros = "0.18.0"
 # For serialization, eg sending requests to a server. Otherwise, not required.
 serde = { version = "^1.0.85", features = ['derive'] }
 futures = "^0.3.4"
-
+esdh_data_structs = { git = "https://github.com/surt666/esdh_data_structs" }
+serde-value = "0.6.0"
+strum = "0.18.0"
+strum_macros = "0.18.0"
 
 [dev-dependencies]
 wasm-bindgen-test = "^0.2.50" # NOTE: keep in sync with wasm-bindgen version

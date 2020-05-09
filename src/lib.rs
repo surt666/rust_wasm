@@ -2,7 +2,9 @@ use seed::{prelude::*, *};
 use seed::fetch;
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use futures::Future;
+use esdh_data_structs::*; //{Case, Inspect, ViewTypes};
+use strum::{IntoEnumIterator}; 
+//use strum_macros::{EnumIter};
 
 #[derive(Clone)]
 enum Permission {
@@ -78,7 +80,7 @@ enum Msg {
     Increment,
     Decrement,
     ChangePermSet(String),
-    DataFetched(fetch::ResponseDataResult<ResponseBody>)
+//    DataFetched(fetch::ResponseDataResult<ResponseBody>)
 }
 
 fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
@@ -86,24 +88,24 @@ fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
         Msg::Increment => model.counter += 1,
         Msg::Decrement => model.counter -= 1,
 	Msg::ChangePermSet(perms) => {log!(format!("Permissions {}",perms))}
-	Msg::DataFetched(Ok(response_data)) => {
-            log!(format!("Response data: {:#?}", response_data));
-            orders.skip();
-        }
-	Msg::DataFetched(Err(fail_reason)) => {
-            error!(format!(
-                "Fetch error - Sending message failed - {:#?}",
-                fail_reason
-            ));
-            orders.skip();
-        }
+//	Msg::DataFetched(Ok(response_data)) => {
+//            log!(format!("Response data: {:#?}", response_data));
+//            orders.skip();
+//        }
+//	Msg::DataFetched(Err(fail_reason)) => {
+//            error!(format!(
+//                "Fetch error - Sending message failed - {:#?}",
+//                fail_reason
+//            ));
+//            orders.skip();
+//        }
     }
 }
 
 fn head(model: &Model) -> Node<Msg> {
     let mut cols = Vec::<Node<Msg>>::new();
     for col in model.datasets.iter() {
-	cols.push(th![col.name]);
+	cols.push(th![&col.name]);
     }
     tr![
 	th!["User"],
@@ -139,10 +141,98 @@ fn rows(model: &Model) -> Vec<Node<Msg>> {
 	    }
 	    cols.push(td![format!("{},{},{},{}", temp["source"], temp["raw"], temp["transient"], temp["curated"]), input_ev(Ev::Input, Msg::ChangePermSet)]);	    
 	}
-	rows.push(tr![td![temp["user"]], cols.clone()]);
+	rows.push(tr![td![temp["user"].clone()], cols.clone()]);
 	cols.clear();
     }
     rows
+}
+
+trait Layout {
+    fn layout(&self) -> Node<Msg>;
+}
+
+impl Layout for Case {
+    fn layout(&self) -> Node<Msg> {
+	let jp: Vec<Node<Msg>> = self.jp.as_ref().unwrap_or(&vec![]).into_iter().map(|x| li![x.layout()]).collect();
+	let sec_act: Vec<Node<Msg>> = self.secondary_actors.as_ref().unwrap_or(&vec![]).into_iter().map(|x| option![attrs!{At::Selected => true}, x]).collect();
+	let categories: Vec<Node<Msg>> = Categories::iter().map(|x| option![attrs!{At::Selected => false}, x.as_ref().to_string()]).collect();
+	let discard_codes: Vec<Node<Msg>> = DiscardCodes::iter().map(|x| option![attrs!{At::Selected => false}, x.as_ref().to_string()]).collect();
+	div![
+	    div![label!["Type"], label![&self.r#type.as_ref()]],
+	    div![label!["Pk"], label![&self.pk]],
+	    div![label!["Title"], input![attrs!{At::Value => &self.title}]],
+	    div![label!["Owner"], input![attrs!{At::Value => &self.owner}]],
+	    div![label!["Responsible"], input![attrs!{At::Value => &self.responsible}]],
+	    div![label!["Primary actor"], input![attrs!{At::Value => &self.primary_actor}]],
+	    div![label!["Secondary actors"], select![sec_act]],
+	    div![label!["Borrower"], input![attrs!{At::Value => &self.borrower.as_ref().unwrap_or(&"".into())}]],
+	    div![label!["Created"], label![&self.created]],
+	    div![label!["Updated"], label![&self.updated]],
+	    div![label!["Archive"], input![attrs!{At::Value => &self.archive.as_ref().unwrap_or(&"".into())}]],
+	    div![label!["Category"], select![categories]],
+	    div![label!["Description"], textarea![attrs!{At::Value => &self.description}]],
+	    div![label!["Legal basis"], input![attrs!{At::Value => &self.legal_basis.as_ref().unwrap_or(&"".into())}]],
+	    div![label!["Publicly excepted"], input![attrs!{At::Type => "checkbox", At::Checked => &self.publicly_excepted}]],
+	    div![label!["Principled"], input![attrs!{At::Type => "checkbox", At::Checked => &self.principled}]],
+	    div![label!["Category"], select![discard_codes]],
+	    div![label!["Delivered to archive"], input![attrs!{At::Type => "checkbox", At::Checked => &self.delivered_to_archive}]],
+	    div![label!["Status"], label![&self.status.as_ref()]],
+	    div![label!["Entity"], input![attrs!{At::Value => &self.entity.as_ref().unwrap_or(&"".into())}]],	    
+	    ol![jp]
+	]
+    }
+}
+
+impl Layout for Jn {
+    fn layout(&self) -> Node<Msg> {
+	div![
+	    div![label!["Type"], label![&self.r#type.as_ref()]],
+	    div![label!["Pk"], label![&self.pk]],
+	    div![label!["Title"], input![attrs!{At::Value => &self.title}]],
+	    div![label!["Responsible"], input![attrs!{At::Value => &self.responsible}]],
+	    div![label!["Primary actor"], input![attrs!{At::Value => &self.primary_actor}]],
+	    div![label!["Created"], label![&self.created]],
+	    div![label!["Updated"], label![&self.updated]],
+	    div![label!["Text"], textarea![attrs!{At::Value => &self.text}]],
+	]
+    }
+}
+
+impl Layout for Doc {
+    fn layout(&self) -> Node<Msg> {
+	div![
+	    div![label!["Type"], label![&self.r#type.as_ref()]],
+	    div![label!["Pk"], label![&self.pk]],
+	    div![label!["Title"], input![attrs!{At::Value => &self.title}]],
+	    div![label!["Created"], label![&self.created]],
+	    div![label!["Updated"], label![&self.updated]],
+	    div![label!["Synopsis"], textarea![attrs!{At::Value => &self.synopsis}]],
+	    div![label!["Letter date"], input![attrs!{At::Value => &self.letter_date}]],
+	    div![label!["Link"], input![attrs!{At::Value => &self.link}]],
+	]
+    }
+}
+
+impl Layout for Jp {
+    fn layout(&self) -> Node<Msg> {
+	let jn: Vec<Node<Msg>> = self.jn.as_ref().unwrap_or(&vec![]).into_iter().map(|x| li![x.layout()]).collect();
+	let docs: Vec<Node<Msg>> = self.docs.as_ref().unwrap_or(&vec![]).into_iter().map(|x| li![x.layout()]).collect();
+	div![
+	    div![label!["Type"], label![&self.r#type.as_ref()]],
+	    div![label!["Pk"], label![&self.pk]],
+	    div![label!["Title"], input![attrs!{At::Value => &self.title}]],
+	    div![label!["Responsible"], input![attrs!{At::Value => &self.responsible}]],
+	    div![label!["Primary actor"], input![attrs!{At::Value => &self.primary_actor}]],
+	    div![label!["Created"], label![&self.created]],
+	    div![label!["Updated"], label![&self.updated]],	    
+	    ol![jn],
+	    ol![docs]
+	]
+    }
+}
+
+fn get_layout<T: Inspect + Layout>(elem: T) -> Node<Msg> {
+    elem.layout()
 }
 
 fn view(model: &Model) -> Node<Msg> {
@@ -150,6 +240,36 @@ fn view(model: &Model) -> Node<Msg> {
 	 div![attrs!{At::Class => "row", At::Id => "header"},
 	      h2!["Header"]
 	 ],
+	 div![attrs!{At::Class => "row", At::Id => "content"},
+	      get_layout(Case{
+		  r#type: CaseElements::Case,
+		  title: "ny title".to_string(),
+		  jp: Some(vec![
+		      Jp {
+			  r#type: CaseElements::JP,
+			  title: "jp title1".to_string(),
+			  jn: Some(vec![
+			      Jn {
+				  r#type: CaseElements::JN,
+				  title: "jn title1".to_string(),
+				  ..Default::default()
+			      }
+			  ]),
+			  docs: Some(vec![
+			      Doc {
+				  r#type: CaseElements::Doc,
+				  title: "doc title1".to_string(),
+				  ..Default::default()
+			      }
+			  ]), 
+			  ..Default::default()
+		      },
+		      Jp {
+			  r#type: CaseElements::JP,
+			  title: "jp title2".to_string(),
+			  ..Default::default()
+		      }]),
+		  ..Default::default()})],
 	 div![attrs!{At::Class => "row", At::Id => "main"},
 	     table![attrs!{"border" => "1"},
 		 head(model),
@@ -175,7 +295,7 @@ struct ResponseBody {
     pub success: bool,
 }
 
-async fn fetch_data() -> Result<Msg, Msg> {
+/*async fn fetch_data() -> Result<Msg, Msg> {
     let message = RequestBody {
         action: "GetDatasets".into()
     };
@@ -190,11 +310,11 @@ async fn fetch_data() -> Result<Msg, Msg> {
 fn after_mount(_: Url, orders: &mut impl Orders<Msg>) -> AfterMount<Model> {
     orders.perform_cmd(fetch_data());
     AfterMount::default()
-}
+}*/
 
 #[wasm_bindgen(start)]
 pub fn render() {
     App::builder(update, view)
-	.after_mount(after_mount)
+//	.after_mount(after_mount)
 	.build_and_start();
 }
