@@ -1,9 +1,10 @@
+
 use seed::{prelude::*, *};
 use seed::fetch;
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use esdh_data_structs::*; //{Case, Inspect, ViewTypes};
-use strum::{IntoEnumIterator}; 
+use strum::{IntoEnumIterator, AsStaticRef}; 
 //use strum_macros::{EnumIter};
 
 #[derive(Clone)]
@@ -147,44 +148,102 @@ fn rows(model: &Model) -> Vec<Node<Msg>> {
     rows
 }
 
+enum EditType {
+    New,
+    Edit,
+    Show,
+}
+
 trait Layout {
-    fn layout(&self) -> Node<Msg>;
+    fn layout(&self, action: &EditType) -> Node<Msg>;
+}
+
+fn construct_enum_lists<T: IntoEnumIterator + std::convert::AsRef<str>>(chosen: &str, _: T) -> Vec<Node<Msg>> {
+    log!(chosen);
+    let l: Vec<Node<Msg>> = T::iter()
+	.map(|x| {
+	    let xstr = x.as_ref();	   
+	    option![attrs!{At::Selected => (xstr == chosen).as_at_value()}, xstr]
+	})
+	.collect();
+    l
 }
 
 impl Layout for Case {
-    fn layout(&self) -> Node<Msg> {
-	let jp: Vec<Node<Msg>> = self.jp.as_ref().unwrap_or(&vec![]).into_iter().map(|x| li![x.layout()]).collect();
+    fn layout(&self, action: &EditType) -> Node<Msg> {
+	let jp: Vec<Node<Msg>> = self.jp.as_ref().unwrap_or(&vec![]).into_iter().map(|x| li![x.layout(action)]).collect();
 	let sec_act: Vec<Node<Msg>> = self.secondary_actors.as_ref().unwrap_or(&vec![]).into_iter().map(|x| option![attrs!{At::Selected => true}, x]).collect();
-	let categories: Vec<Node<Msg>> = Categories::iter().map(|x| option![attrs!{At::Selected => false}, x.as_ref().to_string()]).collect();
-	let discard_codes: Vec<Node<Msg>> = DiscardCodes::iter().map(|x| option![attrs!{At::Selected => false}, x.as_ref().to_string()]).collect();
-	div![
-	    div![label!["Type"], label![&self.r#type.as_ref()]],
-	    div![label!["Pk"], label![&self.pk]],
-	    div![label!["Title"], input![attrs!{At::Value => &self.title}]],
-	    div![label!["Owner"], input![attrs!{At::Value => &self.owner}]],
-	    div![label!["Responsible"], input![attrs!{At::Value => &self.responsible}]],
-	    div![label!["Primary actor"], input![attrs!{At::Value => &self.primary_actor}]],
-	    div![label!["Secondary actors"], select![sec_act]],
-	    div![label!["Borrower"], input![attrs!{At::Value => &self.borrower.as_ref().unwrap_or(&"".into())}]],
-	    div![label!["Created"], label![&self.created]],
-	    div![label!["Updated"], label![&self.updated]],
-	    div![label!["Archive"], input![attrs!{At::Value => &self.archive.as_ref().unwrap_or(&"".into())}]],
-	    div![label!["Category"], select![categories]],
-	    div![label!["Description"], textarea![attrs!{At::Value => &self.description}]],
-	    div![label!["Legal basis"], input![attrs!{At::Value => &self.legal_basis.as_ref().unwrap_or(&"".into())}]],
-	    div![label!["Publicly excepted"], input![attrs!{At::Type => "checkbox", At::Checked => &self.publicly_excepted}]],
-	    div![label!["Principled"], input![attrs!{At::Type => "checkbox", At::Checked => &self.principled}]],
-	    div![label!["Category"], select![discard_codes]],
-	    div![label!["Delivered to archive"], input![attrs!{At::Type => "checkbox", At::Checked => &self.delivered_to_archive}]],
-	    div![label!["Status"], label![&self.status.as_ref()]],
-	    div![label!["Entity"], input![attrs!{At::Value => &self.entity.as_ref().unwrap_or(&"".into())}]],	    
-	    ol![jp]
-	]
+	let mut component = div![
+	    div![attrs!{At::Id => "type"}, label!["Type"], label![&self.r#type.as_ref()]],
+	    div![attrs!{At::Id => "caseid"}, label!["Case Nr."], label![&self.pk]],	    
+	    div![attrs!{At::Id => "created"}, label!["Created"], label![&self.created]],
+	    div![attrs!{At::Id => "updated"}, label!["Updated"], label![&self.updated]],	    	    	    	  
+	];
+	match action {
+	    EditType::New => {
+		component.add_child(div![label!["Title"], input![attrs!{At::Value => &self.title}]]);
+		component.add_child(div![label!["Owner"], input![attrs!{At::Value => &self.owner}]]);
+		component.add_child(div![label!["Responsible"], input![attrs!{At::Value => &self.responsible}]]);
+		component.add_child(div![label!["Primary actor"], input![attrs!{At::Value => &self.primary_actor}]]);
+		component.add_child(div![label!["Secondary actors"], select![sec_act]]);
+		component.add_child(div![label!["Borrower"], input![attrs!{At::Value => &self.borrower.as_ref().unwrap_or(&"".into())}]]);
+		component.add_child(div![label!["Archive"], input![attrs!{At::Value => &self.archive.as_ref().unwrap_or(&"".into())}]]);
+		component.add_child(div![label!["Category"], select![construct_enum_lists(&self.category.as_ref(), Categories::Cat1)]]);
+		component.add_child(div![label!["Description"], textarea![attrs!{At::Value => &self.description}]]);
+		component.add_child(div![label!["Legal basis"], input![attrs!{At::Value => &self.legal_basis.as_ref().unwrap_or(&"".into())}]]);
+		component.add_child(div![label!["Publicly excepted"], input![attrs!{At::Type => "checkbox"; At::Checked => (&self.publicly_excepted == &true).as_at_value()}]]);
+		component.add_child(div![label!["Principled"], input![attrs!{At::Type => "checkbox"; At::Checked => (&self.principled == &true).as_at_value()}]]);
+		component.add_child(div![label!["Discard code"], select![construct_enum_lists(&self.discard_code.as_ref().unwrap_or(&DiscardCodes::C1).as_ref(), DiscardCodes::C1)]]);
+		component.add_child(div![label!["Delivered to archive"], input![attrs!{At::Type => "checkbox"; At::Checked => (&self.delivered_to_archive == &true).as_at_value()}]]);
+		component.add_child(div![label!["Entity"], input![attrs!{At::Value => &self.entity.as_ref().unwrap_or(&"".into())}]]);
+		
+		component.add_child(div![label!["Status"], label![Stati::Created.as_ref()]]);
+	    },
+	    EditType::Edit => {
+		component.add_child(div![label!["Title"], input![attrs!{At::Value => &self.title}]]);
+		component.add_child(div![label!["Owner"], input![attrs!{At::Value => &self.owner}]]);
+		component.add_child(div![label!["Responsible"], input![attrs!{At::Value => &self.responsible}]]);
+		component.add_child(div![label!["Primary actor"], input![attrs!{At::Value => &self.primary_actor}]]);
+		component.add_child(div![label!["Secondary actors"], select![sec_act]]);
+		component.add_child(div![label!["Borrower"], input![attrs!{At::Value => &self.borrower.as_ref().unwrap_or(&"".into())}]]);
+		component.add_child(div![label!["Archive"], input![attrs!{At::Value => &self.archive.as_ref().unwrap_or(&"".into())}]]);
+		component.add_child(div![label!["Category"], select![construct_enum_lists(&self.category.as_ref(), Categories::Cat1)]]);
+		component.add_child(div![label!["Description"], textarea![attrs!{At::Value => &self.description}]]);
+		component.add_child(div![label!["Legal basis"], input![attrs!{At::Value => &self.legal_basis.as_ref().unwrap_or(&"".into())}]]);
+		component.add_child(div![label!["Publicly excepted"], input![attrs!{At::Type => "checkbox"; At::Checked => (&self.publicly_excepted == &true).as_at_value()}]]);
+		component.add_child(div![label!["Principled"], input![attrs!{At::Type => "checkbox"; At::Checked => (&self.principled == &true).as_at_value()}]]);
+		component.add_child(div![label!["Discard code"], select![construct_enum_lists(&self.discard_code.as_ref().unwrap_or(&DiscardCodes::C1).as_ref(), DiscardCodes::C1)]]);
+		component.add_child(div![label!["Delivered to archive"], input![attrs!{At::Type => "checkbox"; At::Checked => (&self.delivered_to_archive == &true).as_at_value()}]]);
+		component.add_child(div![label!["Entity"], input![attrs!{At::Value => &self.entity.as_ref().unwrap_or(&"".into())}]]);
+
+		component.add_child(div![label!["Status"], select![construct_enum_lists(&self.status.as_ref(), Stati::Created)]]);
+	    },
+	    EditType::Show => {
+		component.add_child(div![label!["Title"], label![&self.title]]);
+		component.add_child(div![label!["Owner"], label![&self.owner]]);
+		component.add_child(div![label!["Responsible"], label![&self.responsible]]);
+		component.add_child(div![label!["Primary actor"], label![&self.primary_actor]]);
+		component.add_child(div![label!["Secondary actors"], select![sec_act]]);
+		component.add_child(div![label!["Borrower"], label![&self.borrower.as_ref().unwrap_or(&"".into())]]);
+		component.add_child(div![label!["Archive"], label![&self.archive.as_ref().unwrap_or(&"".into())]]);
+		component.add_child(div![label!["Category"], select![construct_enum_lists(&self.category.as_ref(), Categories::Cat1)]]);
+		component.add_child(div![label!["Description"], textarea![attrs!{At::Value => &self.description}]]);
+		component.add_child(div![label!["Legal basis"], label![&self.legal_basis.as_ref().unwrap_or(&"".into())]]);
+		component.add_child(div![label!["Publicly excepted"], input![attrs!{At::Type => "checkbox"; At::Checked => (&self.publicly_excepted == &true).as_at_value()}]]);
+		component.add_child(div![label!["Principled"], input![attrs!{At::Type => "checkbox"; At::Checked => (&self.principled == &true).as_at_value()}]]);
+		component.add_child(div![label!["Discard code"], select![construct_enum_lists(&self.discard_code.as_ref().unwrap_or(&DiscardCodes::C1).as_ref(), DiscardCodes::C1)]]);
+		component.add_child(div![label!["Delivered to archive"], input![attrs!{At::Type => "checkbox"; At::Checked => (&self.delivered_to_archive == &true).as_at_value()}]]);
+		component.add_child(div![label!["Entity"], label![&self.entity.as_ref().unwrap_or(&"".into())]]);
+		component.add_child(div![label!["Status"], label![&self.status.as_ref()]]);
+	    },
+	}
+	component.add_child(ol![jp]);
+	component
     }
 }
 
 impl Layout for Jn {
-    fn layout(&self) -> Node<Msg> {
+    fn layout(&self, action: &EditType) -> Node<Msg> {
 	div![
 	    div![label!["Type"], label![&self.r#type.as_ref()]],
 	    div![label!["Pk"], label![&self.pk]],
@@ -199,7 +258,7 @@ impl Layout for Jn {
 }
 
 impl Layout for Doc {
-    fn layout(&self) -> Node<Msg> {
+    fn layout(&self, action: &EditType) -> Node<Msg> {
 	div![
 	    div![label!["Type"], label![&self.r#type.as_ref()]],
 	    div![label!["Pk"], label![&self.pk]],
@@ -214,9 +273,9 @@ impl Layout for Doc {
 }
 
 impl Layout for Jp {
-    fn layout(&self) -> Node<Msg> {
-	let jn: Vec<Node<Msg>> = self.jn.as_ref().unwrap_or(&vec![]).into_iter().map(|x| li![x.layout()]).collect();
-	let docs: Vec<Node<Msg>> = self.docs.as_ref().unwrap_or(&vec![]).into_iter().map(|x| li![x.layout()]).collect();
+    fn layout(&self, action: &EditType) -> Node<Msg> {
+	let jn: Vec<Node<Msg>> = self.jn.as_ref().unwrap_or(&vec![]).into_iter().map(|x| li![x.layout(action)]).collect();
+	let docs: Vec<Node<Msg>> = self.docs.as_ref().unwrap_or(&vec![]).into_iter().map(|x| li![x.layout(action)]).collect();
 	div![
 	    div![label!["Type"], label![&self.r#type.as_ref()]],
 	    div![label!["Pk"], label![&self.pk]],
@@ -231,8 +290,8 @@ impl Layout for Jp {
     }
 }
 
-fn get_layout<T: Inspect + Layout>(elem: T) -> Node<Msg> {
-    elem.layout()
+fn get_layout<T: Layout>(elem: T, action: &EditType) -> Node<Msg> {
+    elem.layout(action)
 }
 
 fn view(model: &Model) -> Node<Msg> {
@@ -269,7 +328,7 @@ fn view(model: &Model) -> Node<Msg> {
 			  title: "jp title2".to_string(),
 			  ..Default::default()
 		      }]),
-		  ..Default::default()})],
+		  ..Default::default()}, &EditType::Edit)],
 	 div![attrs!{At::Class => "row", At::Id => "main"},
 	     table![attrs!{"border" => "1"},
 		 head(model),
